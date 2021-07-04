@@ -1,0 +1,47 @@
+pipeline{
+    agent any
+    tools {
+      maven 'M2'
+    }
+    environment {
+      DOCKER_TAG = getVersion()
+    }
+
+    stages{
+        stage('SCM'){
+            steps{
+                git credentialsId: 'github', url: 'https://github.com/faizanmohd19911/cicdproject'
+            }
+        }
+        stage('Maven Build'){
+            steps{
+                sh "mvn clean package"
+            }
+        }
+        stage('Docker Build'){
+            steps{
+                sh "docker build . -t faizanmohd199/cicdproject:${DOCKER_TAG}"
+            }
+        }
+        stage('DockerHub Push'){
+            steps{
+                withCredentials([string(credentialsId: 'DockerHubPass', variable: 'DockerHubPass')]) {
+                    sh "docker login -u faizanmohd199 -p ${DockerHubPass}"
+                }
+                
+                sh "docker push faizanmohd199/cicdproject:${DOCKER_TAG} "
+            }
+        }
+        
+        stage('Deploy Docker'){
+            steps{
+                ansiblePlaybook credentialsId: 'dev', disableHostKeyChecking: true, extras: "-e DOCKER_TAG=${DOCKER_TAG}", installation: 'ansible', inventory: 'dev.inv', playbook: 'deploy-docker.yml'
+            }
+        }
+    }
+}
+
+def getVersion(){
+    def commitHash = sh label: '',returnStdout: true, script: 'git rev-parse --short HEAD'
+    return commitHash
+}
